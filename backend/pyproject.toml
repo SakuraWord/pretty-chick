@@ -13,6 +13,7 @@ dependencies = [
     "djangorestframework>=3.16.1",
     "djangorestframework-simplejwt>=5.5.1",
     "gunicorn>=25.0.3",
+    "mysqlclient>=2.2.0",
     "psycopg2-binary>=2.9.11",
     "python-dotenv>=1.2.1",
     "redis>=7.1.1",
