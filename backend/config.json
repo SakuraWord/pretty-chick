@@ -1,0 +1,15 @@
+{
+  "port": 8000,
+  "db_type": "mysql",
+  "db_config": {
+    "host": "localhost",
+    "port": 3306,
+    "name": "pretty-chick",
+    "user": "root",
+    "password": "Lxx@1234"
+  },
+  "allow_register": false,
+  "system_initialized": false,
+  "debug": true,
+  "estimate_cache_ttl": 5
+}
