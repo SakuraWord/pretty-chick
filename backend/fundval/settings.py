@@ -97,6 +97,18 @@ if db_type == "postgresql":
             "PORT": os.environ.get("POSTGRES_PORT", db_config.get("port", 5432)),
         }
     }
+elif db_type == "mysql":
+    db_config = config.get("db_config", {})
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.mysql",
+            "NAME": os.environ.get("DB_DATABASE", db_config.get("name", "fundval")),
+            "USER": os.environ.get("DB_USERNAME", db_config.get("user", "root")),
+            "PASSWORD": os.environ.get("DB_PASSWORD", db_config.get("password", "")),
+            "HOST": os.environ.get("DB_HOST", db_config.get("host", "localhost")),
+            "PORT": os.environ.get("DB_PORT", db_config.get("port", 3306)),
+        }
+    }
 else:
     DATABASES = {
         "default": {
