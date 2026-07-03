@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Tabs,
@@ -25,13 +24,9 @@ import {
 } from 'antd';
 import {
   PlusOutlined,
-  DeleteOutlined,
-  HomeOutlined,
-  SwapOutlined,
 } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
-import { watchlistsAPI, fundsAPI, positionsAPI, accountsAPI } from '../api';
-import { useAuth } from '../contexts/AuthContext';
+import { watchlistsAPI, fundsAPI, positionsAPI } from '../api';
 import { usePreference } from '../contexts/PreferenceContext';
 
 const { Text } = Typography;
@@ -44,11 +39,9 @@ const SOURCE_OPTIONS = [
 ];
 
 const HomePage = () => {
-  const navigate = useNavigate();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const { token } = theme.useToken();
-  const { user } = useAuth();
   const { preferredSource, updatePreference } = usePreference();
 
   // --- index行情 ---
@@ -117,20 +110,6 @@ const HomePage = () => {
     } catch (error) {
       if (error.errorFields) return;
       message.error('创建失败');
-    }
-  };
-
-  const handleDeleteWatchlist = async (id) => {
-    try {
-      await watchlistsAPI.delete(id);
-      message.success('删除成功');
-      const response = await watchlistsAPI.list();
-      setWatchlists(response.data);
-      if (id === selectedWatchlistId) {
-        setSelectedWatchlistId(response.data.length > 0 ? response.data[0].id : null);
-      }
-    } catch {
-      message.error('删除失败');
     }
   };
 
@@ -283,7 +262,7 @@ const HomePage = () => {
   };
 
   // ==================== 挂载 & 定时刷新 ====================
-  useEffect(() => { loadIndices(); loadWatchlists(); }, []);
+  useEffect(() => { loadIndices(); loadWatchlists(); }, [loadIndices, loadWatchlists]);
 
   useEffect(() => {
     if (selectedWatchlistId) {
@@ -509,14 +488,6 @@ const HomePage = () => {
       );
     }
 
-    const pos = positions[0] || {};
-    const marketValue = pos.holding_share && selectedFund.latest_nav
-      ? (parseFloat(pos.holding_share) * parseFloat(selectedFund.latest_nav)).toFixed(2)
-      : null;
-    const costValue = pos.holding_cost ? parseFloat(pos.holding_cost) : null;
-    const profit = marketValue && costValue ? (parseFloat(marketValue) - costValue).toFixed(2) : null;
-    const profitRate = costValue && profit ? ((parseFloat(profit) / costValue) * 100).toFixed(2) : null;
-
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* 基金名称 + 实时估值 */}
@@ -658,7 +629,7 @@ const HomePage = () => {
         <Card
           size="small"
           style={{ width: 280, flexShrink: 0, overflow: 'auto' }}
-          bodyStyle={{ padding: 12 }}
+          styles={{ body: { padding: 12 } }}
         >
           {renderWatchlistPanel()}
         </Card>
