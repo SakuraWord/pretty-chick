@@ -12,6 +12,7 @@ import FundDetailPage from './pages/FundDetailPage';
 import AccountsPage from './pages/AccountsPage';
 import PositionsPage from './pages/PositionsPage';
 import WatchlistsPage from './pages/WatchlistsPage';
+import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
 import AdminPage from './pages/AdminPage';
 import ComparePage from './pages/ComparePage';
@@ -58,7 +59,7 @@ function AppInner() {
           <Route
             path="/"
             element={
-              isAuthenticated() ? <Navigate to="/dashboard/watchlists" /> : <Navigate to="/login" />
+              isAuthenticated() ? <Navigate to="/dashboard/home" /> : <Navigate to="/login" />
             }
           />
           <Route path="/login" element={<LoginPage />} />
@@ -70,7 +71,17 @@ function AppInner() {
             element={
               <PrivateRoute>
                 <MainLayout>
-                  <Navigate to="/dashboard/watchlists" />
+                  <Navigate to="/dashboard/home" />
+                </MainLayout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/home"
+            element={
+              <PrivateRoute>
+                <MainLayout>
+                  <HomePage />
                 </MainLayout>
               </PrivateRoute>
             }
