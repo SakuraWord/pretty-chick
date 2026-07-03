@@ -221,7 +221,6 @@ const HomePage = () => {
           case '3M': startDate.setMonth(now.getMonth() - 3); break;
           case '6M': startDate.setMonth(now.getMonth() - 6); break;
           case '1Y': startDate.setFullYear(now.getFullYear() - 1); break;
-          case 'ALL': startDate.setFullYear(now.getFullYear() - 10); break;
           default: startDate.setMonth(now.getMonth() - 1);
         }
         params.start_date = startDate.toISOString().split('T')[0];
