@@ -6,6 +6,7 @@ import {
   Modal,
   Form,
   Input,
+  InputNumber,
   message,
   Popconfirm,
   Empty,
@@ -19,6 +20,9 @@ import {
   Statistic,
   Row,
   Col,
+  Tooltip,
+  Tag,
+  Divider,
   theme,
 } from 'antd';
 import {
@@ -58,6 +62,17 @@ const HomePage = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [groupGrowths, setGroupGrowths] = useState({});
+
+  // --- 添加基金投资数据 ---
+  const [addFundModalVisible, setAddFundModalVisible] = useState(false);
+  const [pendingFundCode, setPendingFundCode] = useState(null);
+  const [pendingFundName, setPendingFundName] = useState(null);
+  const [investForm] = Form.useForm();
+
+  // --- 编辑投资数据 ---
+  const [editItemModalVisible, setEditItemModalVisible] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editInvestForm] = Form.useForm();
 
   // --- 选中基金详情 ---
   const [selectedFund, setSelectedFund] = useState(null);
@@ -175,25 +190,70 @@ const HomePage = () => {
         response.data.results.slice(0, 20).map((f) => ({
           value: f.fund_code,
           label: `${f.fund_code} - ${f.fund_name}`,
+          fund_name: f.fund_name,
         }))
       );
     } catch { message.error('搜索失败'); }
     finally { setSearchLoading(false); }
   };
 
-  const handleAddFund = async (fundCode) => {
+  // 搜索选中 → 弹出投资数据模态
+  const handleAutoCompleteSelect = (fundCode, option) => {
     if (!selectedWatchlistId) { message.error('请先选择自选列表'); return; }
     if (!fundCode) { message.error('请输入基金代码'); return; }
+    setPendingFundCode(fundCode);
+    setPendingFundName(option?.fund_name || fundCode);
+    investForm.resetFields();
+    setAddFundModalVisible(true);
+    setSearchKeyword('');
+    setFundOptions([]);
+  };
+
+  const handleConfirmAddFund = async () => {
     try {
-      await watchlistsAPI.addItem(selectedWatchlistId, fundCode);
+      const values = await investForm.validateFields();
+      const investmentData = {};
+      if (values.amount_invested != null) investmentData.amount_invested = values.amount_invested;
+      if (values.shares_held != null) investmentData.shares_held = values.shares_held;
+      if (values.profit_loss != null) investmentData.profit_loss = values.profit_loss;
+      if (values.holding_days != null) investmentData.holding_days = values.holding_days;
+
+      await watchlistsAPI.addItem(selectedWatchlistId, pendingFundCode, investmentData);
       message.success('添加成功');
-      setSearchKeyword('');
-      setFundOptions([]);
+      setAddFundModalVisible(false);
+      setPendingFundCode(null);
+      investForm.resetFields();
+      await loadWatchlists();
+      loadFundDetails();
+    } catch (error) {
+      if (error.errorFields) return;
+      message.error(error.response?.data?.error || '添加失败');
+    }
+  };
+
+  const handleSkipInvestData = async () => {
+    try {
+      await watchlistsAPI.addItem(selectedWatchlistId, pendingFundCode);
+      message.success('添加成功');
+      setAddFundModalVisible(false);
+      setPendingFundCode(null);
+      investForm.resetFields();
       await loadWatchlists();
       loadFundDetails();
     } catch (error) {
       message.error(error.response?.data?.error || '添加失败');
     }
+  };
+
+  const handleOpenEditItem = (item) => {
+    setEditingItem(item);
+    editInvestForm.setFieldsValue({
+      amount_invested: item.amount_invested,
+      shares_held: item.shares_held,
+      profit_loss: item.profit_loss,
+      holding_days: item.holding_days,
+    });
+    setEditItemModalVisible(true);
   };
 
   const handleRemoveFund = async (fundCode) => {
@@ -339,6 +399,34 @@ const HomePage = () => {
       },
     },
     {
+      title: '', dataIndex: 'amount_invested', key: 'invest_badge', width: 36,
+      render: (_, record) => {
+        const hasData = record.amount_invested || record.shares_held
+          || record.profit_loss != null || record.holding_days;
+        if (!hasData) return null;
+        const tooltipContent = (
+          <div>
+            {record.amount_invested && <div>投入：¥{parseFloat(record.amount_invested).toFixed(2)}</div>}
+            {record.shares_held && <div>份额：{parseFloat(record.shares_held).toFixed(2)}</div>}
+            {record.profit_loss != null && (
+              <div>
+                盈亏：
+                <span style={{ color: parseFloat(record.profit_loss) >= 0 ? '#cf1322' : '#3f8600' }}>
+                  ¥{parseFloat(record.profit_loss).toFixed(2)}
+                </span>
+              </div>
+            )}
+            {record.holding_days && <div>持有：{record.holding_days}天</div>}
+          </div>
+        );
+        return (
+          <Tooltip title={tooltipContent}>
+            <Tag color="blue" style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px', cursor: 'default' }}>持</Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: '', key: 'action', width: 60, fixed: 'right',
       render: (_, record) => (
         <Popconfirm title="确定移除？" onConfirm={() => handleRemoveFund(record.fund_code)}>
@@ -393,13 +481,13 @@ const HomePage = () => {
           style={{ flex: 1 }}
           options={fundOptions}
           onSearch={handleSearch}
-          onSelect={handleAddFund}
+          onSelect={handleAutoCompleteSelect}
           placeholder="搜索基金代码或名称"
           value={searchKeyword}
           onChange={setSearchKeyword}
           notFoundContent={searchLoading ? <Spin size="small" /> : null}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && searchKeyword) handleAddFund(searchKeyword);
+            if (e.key === 'Enter' && searchKeyword) handleAutoCompleteSelect(searchKeyword, { fund_name: searchKeyword });
           }}
         />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)} />
@@ -474,6 +562,89 @@ const HomePage = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 添加基金投资数据 Modal */}
+      <Modal
+        title={`添加基金：${pendingFundCode}${pendingFundName && pendingFundName !== pendingFundCode ? ` - ${pendingFundName}` : ''}`}
+        open={addFundModalVisible}
+        onOk={handleConfirmAddFund}
+        onCancel={() => {
+          setAddFundModalVisible(false);
+          setPendingFundCode(null);
+          investForm.resetFields();
+        }}
+        okText="保存并添加"
+        cancelText="取消"
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button onClick={handleSkipInvestData}>仅添加基金</Button>
+            <Space>
+              <CancelBtn />
+              <OkBtn />
+            </Space>
+          </div>
+        )}
+      >
+        <div style={{ marginBottom: 12, color: token.colorTextSecondary, fontSize: 13 }}>
+          以下为可选信息，用于追踪个人投资情况。
+        </div>
+        <Form form={investForm} layout="vertical" size="small">
+          <Form.Item name="amount_invested" label="投入金额（元）">
+            <InputNumber style={{ width: '100%' }} min={0} precision={2} placeholder="例如：10000.00" />
+          </Form.Item>
+          <Form.Item name="shares_held" label="持有份额">
+            <InputNumber style={{ width: '100%' }} min={0} precision={4} placeholder="例如：5000.1234" />
+          </Form.Item>
+          <Form.Item name="profit_loss" label="盈利/亏损（元）">
+            <InputNumber style={{ width: '100%' }} precision={2} placeholder="正值为盈利，负值为亏损" />
+          </Form.Item>
+          <Form.Item name="holding_days" label="持有天数">
+            <InputNumber style={{ width: '100%' }} min={1} placeholder="例如：365" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 编辑投资数据 Modal */}
+      <Modal
+        title={`编辑投资数据：${editingItem?.fund_code} - ${editingItem?.fund_name}`}
+        open={editItemModalVisible}
+        onOk={async () => {
+          try {
+            const values = await editInvestForm.validateFields();
+            await watchlistsAPI.updateItem(selectedWatchlistId, editingItem.id, values);
+            message.success('更新成功');
+            setEditItemModalVisible(false);
+            setEditingItem(null);
+            editInvestForm.resetFields();
+            await loadWatchlists();
+            loadFundDetails();
+          } catch (error) {
+            if (error.errorFields) return;
+            message.error(error.response?.data?.error || '更新失败');
+          }
+        }}
+        onCancel={() => {
+          setEditItemModalVisible(false);
+          setEditingItem(null);
+          editInvestForm.resetFields();
+        }}
+        okText="保存" cancelText="取消"
+      >
+        <Form form={editInvestForm} layout="vertical" size="small">
+          <Form.Item name="amount_invested" label="投入金额（元）">
+            <InputNumber style={{ width: '100%' }} min={0} precision={2} placeholder="例如：10000.00" />
+          </Form.Item>
+          <Form.Item name="shares_held" label="持有份额">
+            <InputNumber style={{ width: '100%' }} min={0} precision={4} placeholder="例如：5000.1234" />
+          </Form.Item>
+          <Form.Item name="profit_loss" label="盈利/亏损（元）">
+            <InputNumber style={{ width: '100%' }} precision={2} placeholder="正值为盈利，负值为亏损" />
+          </Form.Item>
+          <Form.Item name="holding_days" label="持有天数">
+            <InputNumber style={{ width: '100%' }} min={1} placeholder="例如：365" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 
@@ -524,6 +695,73 @@ const HomePage = () => {
               )}
             </Col>
           </Row>
+
+          {/* 投资数据摘要 */}
+          {(() => {
+            const currentWatchlist = watchlists.find((w) => w.id === selectedWatchlistId);
+            const item = currentWatchlist?.items?.find((i) => i.fund_code === selectedFund.fund_code);
+            if (!item || (!item.amount_invested && !item.shares_held && item.profit_loss == null && !item.holding_days)) {
+              return null;
+            }
+            const currentValue = item.shares_held && selectedFund.latest_nav
+              ? parseFloat(item.shares_held) * parseFloat(selectedFund.latest_nav)
+              : null;
+            const invested = item.amount_invested ? parseFloat(item.amount_invested) : null;
+            const realtimePnl = currentValue && invested ? currentValue - invested : null;
+            return (
+              <>
+                <Divider style={{ margin: '10px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text strong style={{ fontSize: 13 }}>我的投资数据</Text>
+                  <Button type="link" size="small" onClick={() => handleOpenEditItem(item)}>编辑</Button>
+                </div>
+                <Row gutter={12}>
+                  {invested != null && (
+                    <Col span={8}>
+                      <Statistic title="投入金额" value={`¥${invested.toFixed(2)}`} valueStyle={{ fontSize: 14 }} />
+                    </Col>
+                  )}
+                  {item.shares_held && (
+                    <Col span={8}>
+                      <Statistic title="持有份额" value={parseFloat(item.shares_held).toFixed(2)} valueStyle={{ fontSize: 14 }} />
+                    </Col>
+                  )}
+                  {item.profit_loss != null && (
+                    <Col span={8}>
+                      <Statistic
+                        title="盈亏"
+                        value={parseFloat(item.profit_loss)}
+                        precision={2}
+                        prefix={parseFloat(item.profit_loss) >= 0 ? '+' : ''}
+                        suffix="元"
+                        valueStyle={{ fontSize: 14, color: parseFloat(item.profit_loss) >= 0 ? '#cf1322' : '#3f8600' }}
+                      />
+                    </Col>
+                  )}
+                  {item.holding_days && (
+                    <Col span={8}>
+                      <Statistic title="持有天数" value={item.holding_days} suffix="天" valueStyle={{ fontSize: 14 }} />
+                    </Col>
+                  )}
+                </Row>
+                {realtimePnl != null && (
+                  <Row style={{ marginTop: 4 }}>
+                    <Col span={12}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        当前市值：¥{currentValue.toFixed(2)}
+                      </Text>
+                    </Col>
+                    <Col span={12}>
+                      <Text style={{ fontSize: 12, color: realtimePnl >= 0 ? '#cf1322' : '#3f8600' }}>
+                        实时盈亏：{realtimePnl >= 0 ? '+' : ''}¥{realtimePnl.toFixed(2)}
+                        {realtimePnl != null && invested && invested > 0 ? ` (${(realtimePnl / invested * 100) >= 0 ? '+' : ''}${(realtimePnl / invested * 100).toFixed(2)}%)` : ''}
+                      </Text>
+                    </Col>
+                  </Row>
+                )}
+              </>
+            );
+          })()}
         </Card>
 
         {/* 净值走势图 */}

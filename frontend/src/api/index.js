@@ -100,9 +100,12 @@ export const watchlistsAPI = {
   create: (data) => api.post('/watchlists/', data),
   get: (id) => api.get(`/watchlists/${id}/`),
   delete: (id) => api.delete(`/watchlists/${id}/`),
-  addItem: (id, fundCode) => api.post(`/watchlists/${id}/items/`, { fund_code: fundCode }),
+  addItem: (id, fundCode, investmentData) =>
+    api.post(`/watchlists/${id}/items/`, { fund_code: fundCode, ...investmentData }),
   removeItem: (id, fundCode) => api.delete(`/watchlists/${id}/items/${fundCode}/`),
   reorder: (id, items) => api.put(`/watchlists/${id}/reorder/`, { items }),
+  updateItem: (watchlistId, itemId, data) =>
+    api.patch(`/watchlists/${watchlistId}/items/${itemId}/`, data),
 };
 
 // 用户偏好
