@@ -181,10 +181,25 @@ class FundViewSet(viewsets.ReadOnlyModelViewSet):
     def market_indices(self, request):
         """GET /api/funds/market-indices/ — 大盘指数实时行情"""
         indices = [
+            # A股核心指数
             ("sh000001", "上证指数"),
+            ("sh000300", "沪深300"),
             ("sz399001", "深证成指"),
             ("sz399006", "创业板指"),
             ("sh000688", "科创50"),
+            ("sh000905", "中证500"),
+            ("sh000852", "中证1000"),
+            ("bj899050", "北证50"),
+            # 港股指数
+            ("rt_hkHSI", "恒生指数"),
+            ("rt_hkHSTECH", "恒生科技"),
+            # 亚太指数
+            ("int_kospi", "韩国KOSPI"),
+            ("int_nikkei225", "日经225"),
+            # 美股指数
+            ("int_nasdaq", "纳斯达克"),
+            ("int_sp500", "标普500"),
+            ("int_sox", "费城半导体"),
         ]
         sina = SourceRegistry.get_source("sina")
         result = []
