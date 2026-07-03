@@ -693,3 +693,128 @@ class EastMoneySource(BaseEstimateSource):
         except Exception as e:
             logger.error(f"获取基金持仓失败（未知错误）：{fund_code}, 错误：{e}")
             return []
+
+    def fetch_minute_kline(
+        self, fund_code: str, interval: int = 5, ndays: int = 1
+    ) -> list:
+        """
+        获取日内分钟K线数据（东方财富趋势 API）
+
+        Args:
+            fund_code: 基金代码
+            interval: K线间隔（分钟），1/5/10/15/30
+            ndays: 获取天数
+
+        Returns:
+            list of dict: OHLCV 数据
+        """
+        # 场外基金代码映射：6位数字 → 0.{code}（深市）或 1.{code}（沪市）
+        # 先尝试沪市 (1.)，失败再尝试深市 (0.)
+        try:
+            secids = []
+            for prefix in ("1", "0"):
+                secid = f"{prefix}.{fund_code}"
+                secids.append(secid)
+
+            results = []
+            for secid in secids:
+                try:
+                    resp = requests.get(
+                        "https://push2.eastmoney.com/api/qt/stock/trends2/get",
+                        params={
+                            "fields1": "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13",
+                            "fields2": "f51,f52,f53,f54,f55,f56,f57,f58",
+                            "secid": secid,
+                            "ndays": ndays,
+                        },
+                        timeout=10,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    data_obj = data.get("data")
+                    if not data_obj:
+                        continue
+                    trends = data_obj.get("trends")
+                    if not trends:
+                        continue
+
+                    # 解析：时间,开盘,收盘,最高,最低,成交量,成交额,-
+                    # 按 interval 聚合（原始数据一般是 1 分钟级）
+                    raw_bars = []
+                    for t in trends:
+                        parts = t.split(",")
+                        if len(parts) < 7:
+                            continue
+                        raw_bars.append({
+                            "time": parts[0],
+                            "open": Decimal(parts[1]) if parts[1] != "-" else None,
+                            "close": Decimal(parts[2]) if parts[2] != "-" else None,
+                            "high": Decimal(parts[3]) if parts[3] != "-" else None,
+                            "low": Decimal(parts[4]) if parts[4] != "-" else None,
+                            "volume": int(parts[5]) if parts[5] != "-" else 0,
+                            "amount": Decimal(parts[6]) if parts[6] != "-" else Decimal("0"),
+                        })
+
+                    # 按 interval 聚合
+                    bars = self._aggregate_bars(raw_bars, interval)
+                    if bars:
+                        results.extend(bars)
+                except (requests.RequestException, json.JSONDecodeError):
+                    continue
+
+            return results
+        except Exception as e:
+            logger.error(f"获取分钟K线失败：{fund_code}, 错误：{e}")
+            return []
+
+    def _aggregate_bars(self, raw_bars: list, interval: int) -> list:
+        """将原始分钟K线聚合为指定间隔"""
+        if not raw_bars or interval <= 1:
+            return [
+                {
+                    "time": b["time"],
+                    "open": str(b["open"]) if b["open"] else "0",
+                    "close": str(b["close"]) if b["close"] else "0",
+                    "high": str(b["high"]) if b["high"] else "0",
+                    "low": str(b["low"]) if b["low"] else "0",
+                    "volume": b.get("volume", 0),
+                    "amount": str(b.get("amount", "0")),
+                }
+                for b in raw_bars
+            ]
+
+        aggregated = []
+        chunk = []
+        for b in raw_bars:
+            chunk.append(b)
+            if len(chunk) >= interval:
+                ag = {
+                    "time": chunk[0]["time"],
+                    "open": str(chunk[0]["open"]) if chunk[0]["open"] else "0",
+                    "close": str(chunk[-1]["close"]) if chunk[-1]["close"] else "0",
+                    "high": str(max(b["high"] for b in chunk if b["high"])),
+                    "low": str(min(b["low"] for b in chunk if b["low"])),
+                    "volume": sum(b.get("volume", 0) for b in chunk),
+                    "amount": str(sum(
+                        Decimal(b.get("amount", 0) or 0) for b in chunk
+                    )),
+                }
+                aggregated.append(ag)
+                chunk = []
+
+        # 剩余不足一个 interval 的也加入
+        if chunk:
+            ag = {
+                "time": chunk[0]["time"],
+                "open": str(chunk[0]["open"]) if chunk[0]["open"] else "0",
+                "close": str(chunk[-1]["close"]) if chunk[-1]["close"] else "0",
+                "high": str(max(b["high"] for b in chunk if b["high"])),
+                "low": str(min(b["low"] for b in chunk if b["low"])),
+                "volume": sum(b.get("volume", 0) for b in chunk),
+                "amount": str(sum(
+                    Decimal(b.get("amount", 0) or 0) for b in chunk
+                )),
+            }
+            aggregated.append(ag)
+
+        return aggregated

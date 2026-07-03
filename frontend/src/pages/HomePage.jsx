@@ -82,6 +82,14 @@ const HomePage = () => {
   const [positions, setPositions] = useState([]);
   const [operations, setOperations] = useState([]);
 
+  // --- 图表模式：净值走势 / 分时走势 / K线图 ---
+  const [chartMode, setChartMode] = useState('nav'); // 'nav' | 'intraday' | 'kline'
+  const [intradayData, setIntradayData] = useState([]);
+  const [intradayLoading, setIntradayLoading] = useState(false);
+  const [klineBars, setKlineBars] = useState([]);
+  const [klineInterval, setKlineInterval] = useState(5); // 5|10|15|30 min, or 0 = daily
+  const [klineLoading, setKlineLoading] = useState(false);
+
   // --- 移动端 Tab ---
   const [mobileTab, setMobileTab] = useState('watchlist');
 
@@ -306,14 +314,39 @@ const HomePage = () => {
     } catch { setOperations([]); }
   }, []);
 
+  const loadIntradayData = useCallback(async (code) => {
+    setIntradayLoading(true);
+    try {
+      const response = await fundsAPI.estimateIntraday(code, preferredSource);
+      setIntradayData(response.data?.snapshots || []);
+    } catch { setIntradayData([]); }
+    finally { setIntradayLoading(false); }
+  }, [preferredSource]);
+
+  const loadKlineData = useCallback(async (code, interval) => {
+    setKlineLoading(true);
+    try {
+      let response;
+      if (interval === 0) {
+        response = await fundsAPI.dailyKline(code, 60);
+      } else {
+        response = await fundsAPI.intradayKline(code, interval, 1);
+      }
+      setKlineBars(response.data?.bars || []);
+    } catch { setKlineBars([]); }
+    finally { setKlineLoading(false); }
+  }, []);
+
   const handleSelectFund = useCallback((fund) => {
     setSelectedFund(fund);
     if (fund) {
       loadNavHistory(fund.fund_code, timeRange);
       loadFundPositions(fund.fund_code);
       loadOperations(fund.fund_code);
+      loadIntradayData(fund.fund_code);
+      loadKlineData(fund.fund_code, klineInterval);
     }
-  }, [loadNavHistory, loadFundPositions, loadOperations, timeRange]);
+  }, [loadNavHistory, loadFundPositions, loadOperations, loadIntradayData, loadKlineData, timeRange, klineInterval]);
 
   // ==================== 数据源切换 ====================
   const handleSourceChange = async (source) => {
@@ -371,6 +404,91 @@ const HomePage = () => {
       grid: { left: '8%', right: '4%', top: 10, bottom: 20 },
     };
   }, [navHistory, operations, token.colorPrimary]);
+
+  // ==================== ECharts 分时走势图 ====================
+  const intradayChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    xAxis: {
+      type: 'category',
+      data: intradayData.map((s) => {
+        const d = new Date(s.timestamp);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }),
+    },
+    yAxis: { type: 'value', scale: true, name: '估值净值' },
+    series: [{
+      name: '估值净值',
+      type: 'line',
+      data: intradayData.map((s) => parseFloat(s.estimate_nav)),
+      smooth: true,
+      lineStyle: { color: '#cf1322', width: 2 },
+      itemStyle: { color: '#cf1322' },
+      symbol: 'circle',
+      symbolSize: 3,
+      areaStyle: { color: 'rgba(207,19,34,0.08)' },
+    }],
+    grid: { left: '8%', right: '4%', top: 10, bottom: 20 },
+  }), [intradayData]);
+
+  // ==================== ECharts K线图 ====================
+  const klineChartOption = useMemo(() => {
+    const xData = klineInterval === 0
+      ? klineBars.map((b) => b.date)
+      : klineBars.map((b) => b.time);
+    const ohlcData = klineBars.map((b) => [
+      parseFloat(b.open),
+      parseFloat(b.close),
+      parseFloat(b.low),
+      parseFloat(b.high),
+    ]);
+    const volumeData = klineBars.map((b, i) => {
+      const vol = b.volume != null ? parseFloat(b.volume) : 0;
+      // 颜色跟随涨跌
+      const close = parseFloat(b.close);
+      const open = parseFloat(b.open);
+      const up = close >= open;
+      return {
+        value: vol,
+        itemStyle: { color: up ? '#cf1322' : '#3f8600' },
+      };
+    });
+    return {
+      tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+      axisPointer: { link: [{ xAxisIndex: 'all' }] },
+      grid: [
+        { left: '8%', right: '4%', top: 10, height: '60%' },
+        { left: '8%', right: '4%', top: '75%', height: '16%' },
+      ],
+      xAxis: [
+        { type: 'category', data: xData, gridIndex: 0, axisLabel: { show: true } },
+        { type: 'category', data: xData, gridIndex: 1, axisLabel: { show: false } },
+      ],
+      yAxis: [
+        { type: 'value', scale: true, gridIndex: 0 },
+        { type: 'value', gridIndex: 1, axisLabel: { show: false } },
+      ],
+      series: [
+        {
+          name: 'K线',
+          type: 'candlestick',
+          data: ohlcData,
+          xAxisIndex: 0,
+          yAxisIndex: 0,
+          itemStyle: {
+            color: '#cf1322', color0: '#3f8600',
+            borderColor: '#cf1322', borderColor0: '#3f8600',
+          },
+        },
+        {
+          name: '成交量',
+          type: 'bar',
+          data: volumeData,
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+        },
+      ],
+    };
+  }, [klineBars, klineInterval]);
 
   // ==================== 自选列表表格列 ====================
   const columns = [
@@ -764,28 +882,87 @@ const HomePage = () => {
           })()}
         </Card>
 
-        {/* 净值走势图 */}
+        {/* 图表区：Tab 切换净值走势 / 分时走势 / K线图 */}
         <Card
           size="small"
-          title="净值走势"
-          extra={
-            <Space size="small" wrap>
-              {['1W', '1M', '3M', '6M', '1Y'].map((r) => (
-                <Button
-                  key={r} size="small"
-                  type={timeRange === r ? 'primary' : 'default'}
-                  onClick={() => { setTimeRange(r); loadNavHistory(selectedFund.fund_code, r); }}
-                >{r === '1W' ? '1周' : r}</Button>
-              ))}
+          title={
+            <Space size="middle">
+              <Button
+                size="small"
+                type={chartMode === 'nav' ? 'primary' : 'default'}
+                onClick={() => { setChartMode('nav'); }}
+              >净值走势</Button>
+              <Button
+                size="small"
+                type={chartMode === 'intraday' ? 'primary' : 'default'}
+                onClick={() => {
+                  setChartMode('intraday');
+                  loadIntradayData(selectedFund.fund_code);
+                }}
+              >分时走势</Button>
+              <Button
+                size="small"
+                type={chartMode === 'kline' ? 'primary' : 'default'}
+                onClick={() => {
+                  setChartMode('kline');
+                  loadKlineData(selectedFund.fund_code, klineInterval);
+                }}
+              >K线图</Button>
             </Space>
           }
+          extra={
+            chartMode === 'nav' ? (
+              <Space size="small" wrap>
+                {['1W', '1M', '3M', '6M', '1Y'].map((r) => (
+                  <Button
+                    key={r} size="small"
+                    type={timeRange === r ? 'primary' : 'default'}
+                    onClick={() => { setTimeRange(r); loadNavHistory(selectedFund.fund_code, r); }}
+                  >{r === '1W' ? '1周' : r}</Button>
+                ))}
+              </Space>
+            ) : chartMode === 'kline' ? (
+              <Space size="small" wrap>
+                {[5, 10, 15, 30, 0].map((iv) => (
+                  <Button
+                    key={iv} size="small"
+                    type={klineInterval === iv ? 'primary' : 'default'}
+                    onClick={() => {
+                      setKlineInterval(iv);
+                      loadKlineData(selectedFund.fund_code, iv);
+                    }}
+                  >{iv === 0 ? '日线' : `${iv}分`}</Button>
+                ))}
+              </Space>
+            ) : null
+          }
         >
-          {chartLoading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
-          ) : navHistory.length > 0 ? (
-            <ReactECharts option={chartOption} style={{ height: isMobile ? 280 : 340 }} />
-          ) : (
-            <Empty description="暂无历史数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          {chartMode === 'nav' && (
+            chartLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+            ) : navHistory.length > 0 ? (
+              <ReactECharts option={chartOption} style={{ height: isMobile ? 280 : 340 }} />
+            ) : (
+              <Empty description="暂无历史数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )
+          )}
+          {chartMode === 'intraday' && (
+            intradayLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+            ) : intradayData.length > 0 ? (
+              <ReactECharts option={intradayChartOption} style={{ height: isMobile ? 280 : 340 }} />
+            ) : (
+              <Empty description="暂无分时数据，交易时段每5分钟采集" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )
+          )}
+          {chartMode === 'kline' && (
+            klineLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
+            ) : klineBars.length > 0 ? (
+              <ReactECharts option={klineChartOption} style={{ height: isMobile ? 280 : 400 }} />
+            ) : (
+              <Empty description="暂无K线数据（场外基金无分钟K线，请切换日线）" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )
           )}
         </Card>
 

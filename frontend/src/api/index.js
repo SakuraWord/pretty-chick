@@ -62,6 +62,10 @@ export const fundsAPI = {
   holdingsRealtime: (fundCode) => api.get(`/funds/${fundCode}/holdings-realtime/`),
   estimateIntraday: (fundCode, source = 'eastmoney') =>
     api.get(`/funds/${fundCode}/estimate-intraday/`, { params: { source } }),
+  intradayKline: (fundCode, interval = 5, ndays = 1) =>
+    api.get(`/funds/${fundCode}/intraday-kline/`, { params: { interval, ndays } }),
+  dailyKline: (fundCode, days = 60) =>
+    api.get(`/funds/${fundCode}/daily-kline/`, { params: { days } }),
   compare: (codes) => api.get('/funds/compare/', { params: { codes: codes.join(',') } }),
   marketIndices: () => api.get('/funds/market-indices/'),
   rankings: (params) => api.get('/funds/rankings/', { params }),

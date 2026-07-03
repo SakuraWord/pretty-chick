@@ -457,6 +457,104 @@ class FundViewSet(viewsets.ReadOnlyModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["get"], url_path="intraday-kline")
+    def intraday_kline(self, request, fund_code=None):
+        """获取日内分钟K线（OHLCV）"""
+        fund = self.get_object()
+        interval = int(request.query_params.get("interval", 5))
+        ndays = int(request.query_params.get("ndays", 1))
+
+        # 优先用 eastmoney 获取分钟K线
+        source = SourceRegistry.get_source("eastmoney")
+        if not source:
+            return Response(
+                {
+                    "fund_code": fund_code,
+                    "interval": interval,
+                    "bars": [],
+                    "message": "数据源不可用",
+                }
+            )
+
+        try:
+            bars = source.fetch_minute_kline(fund_code, interval, ndays)
+        except Exception as e:
+            logger.error(f"获取分钟K线失败：{fund_code}, 错误：{e}")
+            bars = []
+
+        if bars:
+            return Response({
+                "fund_code": fund_code,
+                "interval": interval,
+                "bars": bars,
+                "source": "eastmoney",
+            })
+        else:
+            return Response(
+                {
+                    "fund_code": fund_code,
+                    "interval": interval,
+                    "bars": [],
+                    "source": None,
+                    "fallback": True,
+                    "message": "场外基金无分钟K线数据，请查看分时走势",
+                }
+            )
+
+    @action(detail=True, methods=["get"], url_path="daily-kline")
+    def daily_kline(self, request, fund_code=None):
+        """获取日线K线（从净值历史推导 OHLC）"""
+        fund = self.get_object()
+        days = int(request.query_params.get("days", 60))
+
+        from .models import FundNavHistory
+
+        navs = FundNavHistory.objects.filter(
+            fund=fund,
+        ).order_by("nav_date")[:days * 2]  # 多取一些以应对日期不连续
+
+        if len(navs) < 2:
+            return Response({
+                "fund_code": fund_code,
+                "bars": [],
+                "message": "净值数据不足，无法生成日K线",
+            })
+
+        # 取最近 days 条
+        navs = list(navs)[-days:]
+
+        bars = []
+        for i in range(len(navs)):
+            current = navs[i]
+            if i == 0:
+                # 第一天：开=收=净值，高低=净值
+                nav_val = float(current.unit_nav)
+                bars.append({
+                    "date": str(current.nav_date),
+                    "open": str(round(nav_val, 4)),
+                    "close": str(round(nav_val, 4)),
+                    "high": str(round(nav_val, 4)),
+                    "low": str(round(nav_val, 4)),
+                    "volume": None,
+                })
+            else:
+                prev = navs[i - 1]
+                prev_nav = float(prev.unit_nav)
+                cur_nav = float(current.unit_nav)
+                bars.append({
+                    "date": str(current.nav_date),
+                    "open": str(round(prev_nav, 4)),
+                    "close": str(round(cur_nav, 4)),
+                    "high": str(round(max(prev_nav, cur_nav), 4)),
+                    "low": str(round(min(prev_nav, cur_nav), 4)),
+                    "volume": None,
+                })
+
+        return Response({
+            "fund_code": fund_code,
+            "bars": bars,
+        })
+
     @action(detail=True, methods=["get"], url_path="holdings-realtime")
     def holdings_realtime(self, request, fund_code=None):
         """获取基金持仓 + 实时个股行情"""

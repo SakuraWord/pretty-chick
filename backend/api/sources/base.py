@@ -172,6 +172,32 @@ class BaseEstimateSource(ABC):
         """
         return None
 
+    def fetch_minute_kline(
+        self, fund_code: str, interval: int = 5, ndays: int = 1
+    ) -> list:
+        """
+        获取日内分钟K线数据（非必选实现）
+
+        Args:
+            fund_code: 基金代码
+            interval: K线间隔（分钟），1/5/10/15/30
+            ndays: 获取天数
+
+        Returns:
+            list of dict: [
+                {
+                    'time': '09:35',
+                    'open': Decimal,
+                    'close': Decimal,
+                    'high': Decimal,
+                    'low': Decimal,
+                    'volume': int,
+                    'amount': Decimal,
+                }
+            ]
+        """
+        return []
+
     def fetch_index_holdings(self, fund_code: str) -> list:
         """
         获取基金持仓成分股（非必选实现）
