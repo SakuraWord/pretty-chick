@@ -13,6 +13,7 @@ import {
   GithubOutlined,
   RadarChartOutlined,
   TrophyOutlined,
+  HomeOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { usePreference } from '../contexts/PreferenceContext';
@@ -33,6 +34,7 @@ const MainLayout = ({ children }) => {
   const isMobile = !screens.md;
 
   const desktopMenuItems = [
+    { key: '/dashboard/home', icon: <HomeOutlined />, label: '首页' },
     { key: '/dashboard/watchlists', icon: <StarOutlined />, label: '自选列表' },
     { key: '/dashboard/market', icon: <FundOutlined />, label: '行情中心' },
     { key: '/dashboard/positions', icon: <PieChartOutlined />, label: '持仓查询' },
@@ -44,6 +46,7 @@ const MainLayout = ({ children }) => {
       : []),
   ];
   const mobileMenuItems = [
+    { key: '/dashboard/home', icon: <HomeOutlined />, label: '首页' },
     { key: '/dashboard/watchlists', icon: <StarOutlined />, label: '自选' },
     { key: '/dashboard/market', icon: <FundOutlined />, label: '行情' },
     { key: '/dashboard/positions', icon: <PieChartOutlined />, label: '持仓' },
