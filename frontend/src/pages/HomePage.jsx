@@ -14,7 +14,6 @@ import {
   Space,
   AutoComplete,
   Typography,
-  List,
   Grid,
   Radio,
   Statistic,
@@ -74,6 +73,10 @@ const HomePage = () => {
   // --- 定时器 ---
   const intervalRef = useRef(null);
 
+  // ref 用于 loadWatchlists 闭包中读取最新 selectedWatchlistId
+  const selectedWatchlistIdRef = useRef(selectedWatchlistId);
+  useEffect(() => { selectedWatchlistIdRef.current = selectedWatchlistId; }, [selectedWatchlistId]);
+
   // ==================== 加载指数行情 ====================
   const loadIndices = useCallback(async () => {
     try {
@@ -88,8 +91,8 @@ const HomePage = () => {
     try {
       const response = await watchlistsAPI.list();
       setWatchlists(response.data);
-      if (response.data.length > 0 && !selectedWatchlistId) {
-        setSelectedWatchlistId((prev) => prev || response.data[0].id);
+      if (response.data.length > 0 && !selectedWatchlistIdRef.current) {
+        setSelectedWatchlistId(response.data[0].id);
       }
     } catch (error) {
       message.error('加载自选列表失败');
@@ -505,17 +508,21 @@ const HomePage = () => {
               />
             </Col>
             <Col>
-              <Statistic
-                title="估算涨跌"
-                value={selectedFund.estimate_growth != null ? parseFloat(selectedFund.estimate_growth) : '-'}
-                precision={2}
-                suffix={selectedFund.estimate_growth != null ? '%' : ''}
-                prefix={selectedFund.estimate_growth >= 0 ? '+' : ''}
-                valueStyle={{
-                  fontSize: 16,
-                  color: selectedFund.estimate_growth >= 0 ? '#cf1322' : '#3f8600',
-                }}
-              />
+              {selectedFund.estimate_growth != null ? (
+                <Statistic
+                  title="估算涨跌"
+                  value={parseFloat(selectedFund.estimate_growth)}
+                  precision={2}
+                  suffix="%"
+                  prefix={selectedFund.estimate_growth >= 0 ? '+' : ''}
+                  valueStyle={{
+                    fontSize: 16,
+                    color: selectedFund.estimate_growth >= 0 ? '#cf1322' : '#3f8600',
+                  }}
+                />
+              ) : (
+                <Statistic title="估算涨跌" value="-" valueStyle={{ fontSize: 16 }} />
+              )}
             </Col>
           </Row>
         </Card>
