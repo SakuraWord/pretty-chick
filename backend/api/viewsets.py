@@ -1513,13 +1513,18 @@ class WatchlistViewSet(viewsets.ModelViewSet):
             or -1
         )
 
+        # 提取可选的投资追踪字段
+        extra_fields = {}
+        for field in ["amount_invested", "shares_held", "profit_loss", "holding_days"]:
+            if field in request.data and request.data[field] not in (None, ""):
+                extra_fields[field] = request.data[field]
+
         item = WatchlistItem.objects.create(
-            watchlist=watchlist, fund=fund, order=max_order + 1
+            watchlist=watchlist, fund=fund, order=max_order + 1, **extra_fields
         )
 
-        return Response(
-            {"id": item.id, "fund_code": fund.fund_code}, status=status.HTTP_201_CREATED
-        )
+        serializer = WatchlistItemSerializer(item)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["delete"], url_path="items/(?P<fund_code>[^/.]+)")
     def remove_item(self, request, pk=None, fund_code=None):
@@ -1565,6 +1570,36 @@ class WatchlistViewSet(viewsets.ModelViewSet):
                 pass
 
         return Response({"message": "排序已更新"})
+
+    @action(detail=True, methods=["patch"], url_path="items/(?P<item_id>[^/.]+)")
+    def update_item(self, request, pk=None, item_id=None):
+        """更新自选项的投资数据"""
+        watchlist = self.get_object()
+
+        try:
+            item = WatchlistItem.objects.get(watchlist=watchlist, id=item_id)
+        except WatchlistItem.DoesNotExist:
+            return Response(
+                {"error": "自选项不存在"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        updatable_fields = ["amount_invested", "shares_held", "profit_loss", "holding_days"]
+        updates = {}
+        for field in updatable_fields:
+            if field in request.data:
+                updates[field] = request.data[field]
+
+        if not updates:
+            return Response(
+                {"error": "无可更新的字段"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        for field, value in updates.items():
+            setattr(item, field, value)
+        item.save(update_fields=list(updates.keys()) + ["updated_at"])
+
+        serializer = WatchlistItemSerializer(item)
+        return Response(serializer.data)
 
 
 class SourceViewSet(viewsets.ViewSet):

@@ -381,7 +381,25 @@ class WatchlistItem(models.Model):
     )
     order = models.IntegerField(default=0, help_text="排序")
 
+    # 轻量级投资追踪字段
+    amount_invested = models.DecimalField(
+        max_digits=20, decimal_places=2, null=True, blank=True,
+        help_text="投入金额（元）",
+    )
+    shares_held = models.DecimalField(
+        max_digits=20, decimal_places=4, null=True, blank=True,
+        help_text="持有份额",
+    )
+    profit_loss = models.DecimalField(
+        max_digits=20, decimal_places=2, null=True, blank=True,
+        help_text="盈亏金额（元），正值为盈利，负值为亏损",
+    )
+    holding_days = models.IntegerField(
+        null=True, blank=True, help_text="持有天数",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "watchlist_item"

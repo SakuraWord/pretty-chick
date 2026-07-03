@@ -261,6 +261,10 @@ class WatchlistItemSerializer(serializers.ModelSerializer):
     fund_code = serializers.CharField(source="fund.fund_code", read_only=True)
     fund_name = serializers.CharField(source="fund.fund_name", read_only=True)
     fund_type = serializers.CharField(source="fund.fund_type", read_only=True)
+    latest_nav = serializers.DecimalField(
+        source="fund.latest_nav", max_digits=10, decimal_places=4,
+        read_only=True, default=None,
+    )
 
     class Meta:
         model = WatchlistItem
@@ -270,10 +274,16 @@ class WatchlistItemSerializer(serializers.ModelSerializer):
             "fund_code",
             "fund_name",
             "fund_type",
+            "latest_nav",
             "order",
             "created_at",
+            "updated_at",
+            "amount_invested",
+            "shares_held",
+            "profit_loss",
+            "holding_days",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
 
 class WatchlistSerializer(serializers.ModelSerializer):
