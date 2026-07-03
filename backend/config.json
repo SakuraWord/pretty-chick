@@ -8,8 +8,9 @@
     "user": "root",
     "password": "Lxx@1234"
   },
-  "allow_register": false,
-  "system_initialized": false,
+  "allow_register": true,
+  "system_initialized": true,
   "debug": true,
-  "estimate_cache_ttl": 5
+  "estimate_cache_ttl": 5,
+  "bootstrap_key": "2YKieF89eHDyl6fCOBbxD8LmLMGnpbR7Q6vpgh13LZWWWbtxpheFWTDSC2wVe0co"
 }
